@@ -2,27 +2,18 @@ pipeline {
     agent any
     
     options {
-        // Keep last 10 builds
         buildDiscarder(logRotator(numToKeepStr: '10'))
-        // Timeout if build takes more than 30 minutes
         timeout(time: 30, unit: 'MINUTES')
-        // Timestamps in console output
         timestamps()
     }
     
     triggers {
-        // Schedule: Run daily at 2 AM
-        cron('0 2 * * *')
-        // Or run on every push to main branch
-        // pollSCM('H/5 * * * *')  // Check SCM every 5 minutes
+        cron('H 2 * * *')
     }
     
     environment {
-        // Python version (adjust based on your Jenkins setup)
         PYTHON = 'python3'
-        // Virtual environment directory
         VENV_DIR = 'venv'
-        // Reports directory
         REPORTS_DIR = 'reports'
     }
     
@@ -33,11 +24,10 @@ pipeline {
                 echo 'Setting up test environment'
                 echo '=========================================='
                 
-                // Clean previous reports
                 sh 'rm -rf ${REPORTS_DIR} || true'
                 sh 'mkdir -p ${REPORTS_DIR}'
+                sh 'mkdir -p instance'
                 
-                // Create virtual environment
                 sh '''
                     ${PYTHON} -m venv ${VENV_DIR}
                     . ${VENV_DIR}/bin/activate
@@ -52,6 +42,16 @@ pipeline {
                 sh '''
                     . ${VENV_DIR}/bin/activate
                     pip install -r requirements.txt
+                '''
+            }
+        }
+        
+        stage('Setup Test Database') {
+            steps {
+                echo 'Creating test database with sample data...'
+                sh '''
+                    . ${VENV_DIR}/bin/activate
+                    python3 tests/setup_test_db.py
                 '''
             }
         }
@@ -74,103 +74,35 @@ pipeline {
                         --cov-report=xml:${REPORTS_DIR}/coverage.xml \
                         --json-report \
                         --json-report-file=${REPORTS_DIR}/test_report.json \
-                        -v \
-                        -m "not slow" || true
+                        -v || true
                 '''
             }
         }
         
-        stage('Generate Reports') {
+        stage('Publish Reports') {
             steps {
-                echo 'Publishing test results and coverage reports...'
+                echo 'Publishing test results...'
                 
-                // Publish JUnit test results
+                // JUnit test results (this always works)
                 junit testResults: 'reports/junit.xml', allowEmptyResults: false
                 
-                // Publish HTML reports
-                publishHTML([
-                    allowMissing: false,
-                    alwaysLinkToLastBuild: true,
-                    keepAll: true,
-                    reportDir: 'reports',
-                    reportFiles: 'test_report.html',
-                    reportName: 'Pytest HTML Report',
-                    reportTitles: 'Test Execution Report'
-                ])
+                // Archive all reports as artifacts
+                archiveArtifacts artifacts: 'reports/**/*', allowEmptyArchive: true
                 
-                // Publish coverage report
-                publishHTML([
-                    allowMissing: false,
-                    alwaysLinkToLastBuild: true,
-                    keepAll: true,
-                    reportDir: 'reports/coverage',
-                    reportFiles: 'index.html',
-                    reportName: 'Coverage Report',
-                    reportTitles: 'Code Coverage Report'
-                ])
-                
-                // Publish coverage to Jenkins (if Cobertura plugin installed)
-                // cobertura coberturaReportFile: 'reports/coverage.xml'
+                echo 'Reports available in build artifacts'
             }
         }
     }
     
     post {
         always {
-            echo 'Cleaning up...'
-            // Archive test artifacts
-            archiveArtifacts artifacts: 'reports/**/*', allowEmptyArchive: true
-            
-            // Clean workspace (optional)
-            // cleanWs()
+            echo 'Build complete!'
         }
-        
         success {
             echo '✅ All tests passed successfully!'
-            
-            // Send email notification on success (configure email settings first)
-            // emailext(
-            //     subject: "✅ Jenkins Build Success: ${env.JOB_NAME} - Build #${env.BUILD_NUMBER}",
-            //     body: """
-            //         Build Status: SUCCESS
-            //         Job: ${env.JOB_NAME}
-            //         Build Number: ${env.BUILD_NUMBER}
-            //         Build URL: ${env.BUILD_URL}
-            //         
-            //         All tests passed successfully!
-            //         
-            //         View reports:
-            //         - Test Report: ${env.BUILD_URL}Pytest_20HTML_20Report/
-            //         - Coverage: ${env.BUILD_URL}Coverage_20Report/
-            //     """,
-            //     to: 'your-email@example.com'
-            // )
         }
-        
         failure {
-            echo '❌ Some tests failed!'
-            
-            // Send email notification on failure
-            // emailext(
-            //     subject: "❌ Jenkins Build Failed: ${env.JOB_NAME} - Build #${env.BUILD_NUMBER}",
-            //     body: """
-            //         Build Status: FAILED
-            //         Job: ${env.JOB_NAME}
-            //         Build Number: ${env.BUILD_NUMBER}
-            //         Build URL: ${env.BUILD_URL}
-            //         
-            //         Some tests failed. Please check the reports.
-            //         
-            //         View reports:
-            //         - Test Report: ${env.BUILD_URL}Pytest_20HTML_20Report/
-            //         - Console Output: ${env.BUILD_URL}console
-            //     """,
-            //     to: 'your-email@example.com'
-            // )
-        }
-        
-        unstable {
-            echo '⚠️ Build is unstable - some tests may have warnings'
+            echo '❌ Some tests failed - check reports in artifacts'
         }
     }
 }
