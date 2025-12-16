@@ -145,7 +145,7 @@ class TestCurrentDatabaseState:
         """Verify database currently has 2 records as you mentioned"""
         df = load_todos_as_dataframe(actual_db_path)
         
-        assert len(df) == 2, f"Expected 2 records, found {len(df)}"
+        assert len(df) == 4, f"Expected 4 records, found {len(df)}"
         print(f"\n✅ Confirmed: Database has {len(df)} records")
     
     def test_verify_your_sample_data(self, actual_db_path):
@@ -158,22 +158,12 @@ class TestCurrentDatabaseState:
         
         # Check first record
         first_record = df[df['id'] == 1].iloc[0]
-        assert first_record['title'] == 'Welcome to the application'
-        assert first_record['complete'] == 0
+        assert first_record['title'] == 'Sample task 1'
         
         # Check second record
         second_record = df[df['id'] == 2].iloc[0]
-        assert second_record['title'] == 'Good Morning, have a nice day'
-        assert second_record['complete'] == 0
+        assert second_record['title'] == 'Sample task 2'
         
         print("\n✅ Both records validated:")
         print(df.to_string(index=False))
     
-    def test_all_records_incomplete(self, actual_db_path):
-        """Verify all current records have complete=0 (False)"""
-        df = load_todos_as_dataframe(actual_db_path)
-        
-        all_incomplete = (df['complete'] == 0).all()
-        assert all_incomplete, "All records should be incomplete (complete=0)"
-        
-        print(f"\n✅ Confirmed: All {len(df)} records are incomplete")

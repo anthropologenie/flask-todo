@@ -6,7 +6,7 @@ from pathlib import Path
 # Add parent directory to path so we can import app
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app import app as flask_app, db
+from app import app as flask_app, db, Todo
 from tests.config.test_config import ACTUAL_DB_PATH
 
 
@@ -75,3 +75,58 @@ def sample_todo_data():
         {'title': 'Test task 2', 'complete': True},
         {'title': 'Test task 3', 'complete': False},
     ]
+
+
+# ============================================
+# API Testing Fixtures
+# ============================================
+
+@pytest.fixture
+def api_client(app):
+    """Flask test client for API testing"""
+    return app.test_client()
+
+
+@pytest.fixture
+def sample_todos(app, db_session):
+    """Create sample todos in database for testing"""
+    with app.app_context():
+        # Clear existing data
+        Todo.query.delete()
+        
+        # Add sample todos
+        todos = [
+            Todo(title='Sample task 1', complete=False),
+            Todo(title='Sample task 2', complete=True),
+            Todo(title='Sample task 3', complete=False),
+        ]
+        
+        for todo in todos:
+            db_session.add(todo)
+        
+        db_session.commit()
+        
+        # Return list of created todos
+        return Todo.query.all()
+
+
+@pytest.fixture
+def empty_database(app, db_session):
+    """Ensure database is empty before test"""
+    with app.app_context():
+        Todo.query.delete()
+        db_session.commit()
+
+
+@pytest.fixture
+def todo_factory(app, db_session):
+    """Factory fixture to create todos on demand"""
+    def _create_todo(title, complete=False):
+        with app.app_context():
+            todo = Todo(title=title, complete=complete)
+            db_session.add(todo)
+            db_session.commit()
+            db_session.refresh(todo)  # Get the ID
+            return todo
+    
+    return _create_todo
